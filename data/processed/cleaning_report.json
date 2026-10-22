@@ -1,0 +1,21 @@
+{
+  "input_articles": 2539,
+  "dropped_missing_title_or_url": 0,
+  "dropped_non_english": 0,
+  "dropped_too_short": 1,
+  "dropped_duplicate_title": 2,
+  "output_articles": 2536,
+  "with_description": 1230,
+  "missing_date": 0,
+  "by_source": {
+    "News18": 199,
+    "The Hindu": 306,
+    "Hindustan Times": 215,
+    "Indian Express": 1400,
+    "NDTV": 42,
+    "Times of India": 88,
+    "Economic Times": 51,
+    "Mint": 35,
+    "Firstpost": 200
+  }
+}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<form class="filters" method="GET" action="{{ url_for('index') }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search headlines...">
+  <select name="source">
+    <option value="">All sources</option>
+    {% for s in sources %}<option value="{{ s }}" {{ 'selected' if s == source }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="category">
+    <option value="">All categories</option>
+    {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == category }}>{{ c|capitalize }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary">Filter</button>
+  {% if q or source or category %}<a class="btn btn-outline" href="{{ url_for('index') }}">Clear</a>{% endif %}
+</form>
+
+{% if all_total == 0 %}
+  <div class="empty">
+    <h2>No news data yet</h2>
+    <p>Run <code>python main.py</code> to collect and clean the news, then refresh this page.</p>
+  </div>
+{% elif total == 0 %}
+  <div class="empty"><h2>No articles match your filters</h2></div>
+{% else %}
+  <p class="count">Showing {{ articles|length }} of {{ total }} articles</p>
+
+  <div class="grid">
+    {% for a in articles %}
+    <article class="card">
+      <div class="chips">
+        <span class="chip chip-source">{{ a.source }}</span>
+        <span class="chip chip-cat">{{ a.category }}</span>
+      </div>
+      <h2 class="card-title">
+        <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">{{ a.title }}</a>
+      </h2>
+      {% if a.description %}<p class="card-desc">{{ a.description }}</p>{% endif %}
+      <div class="card-foot">
+        <time title="{{ a._dt|ist_date }}">{{ a._dt|time_ago or "date unknown" }}</time>
+        <a class="read-more" href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Read more &rarr;</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pagination">
+    {% if page > 1 %}
+      <a class="btn btn-outline" href="{{ url_for('index', page=page-1, q=q or None, source=source or None, category=category or None) }}">&larr; Prev</a>
+    {% endif %}
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}
+      <a class="btn btn-outline" href="{{ url_for('index', page=page+1, q=q or None, source=source or None, category=category or None) }}">Next &rarr;</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

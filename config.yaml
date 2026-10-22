@@ -1,0 +1,112 @@
+# ======================================================================
+# Live Indian News - configuration
+# ======================================================================
+# Each feed entry:  name = news source (stored in the "source" field)
+#                   category = topic label (stored in the "category" field)
+#                   enabled = set to false to skip a feed that fails/is unwanted
+# Feeds that fail (blocked, moved, timeout) are logged and skipped; they never
+# stop the run. Check the "feed summary" printed after each ingestion.
+# ======================================================================
+
+rss_feeds:
+  # ---------------- The Hindu ----------------
+  - {name: "The Hindu", category: "top",      url: "https://www.thehindu.com/feeder/default.rss", enabled: true}
+  - {name: "The Hindu", category: "national", url: "https://www.thehindu.com/news/national/feeder/default.rss", enabled: true}
+  - {name: "The Hindu", category: "kerala",   url: "https://www.thehindu.com/news/national/kerala/feeder/default.rss", enabled: true}
+  - {name: "The Hindu", category: "world",    url: "https://www.thehindu.com/news/international/feeder/default.rss", enabled: true}
+  - {name: "The Hindu", category: "business", url: "https://www.thehindu.com/business/feeder/default.rss", enabled: true}
+  - {name: "The Hindu", category: "sports",   url: "https://www.thehindu.com/sport/feeder/default.rss", enabled: true}
+
+  # ---------------- Indian Express ----------------
+  - {name: "Indian Express", category: "india",         url: "https://indianexpress.com/section/india/feed/", enabled: true}
+  - {name: "Indian Express", category: "kerala",        url: "https://indianexpress.com/section/india/kerala/feed/", enabled: true}
+  - {name: "Indian Express", category: "world",         url: "https://indianexpress.com/section/world/feed/", enabled: true}
+  - {name: "Indian Express", category: "business",      url: "https://indianexpress.com/section/business/feed/", enabled: true}
+  - {name: "Indian Express", category: "sports",        url: "https://indianexpress.com/section/sports/feed/", enabled: true}
+  - {name: "Indian Express", category: "technology",    url: "https://indianexpress.com/section/technology/feed/", enabled: true}
+  - {name: "Indian Express", category: "entertainment", url: "https://indianexpress.com/section/entertainment/feed/", enabled: true}
+
+  # ---------------- Times of India ----------------
+  - {name: "Times of India", category: "top",      url: "https://timesofindia.indiatimes.com/rssfeedstopstories.cms", enabled: true}
+  - {name: "Times of India", category: "india",    url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms", enabled: true}
+  - {name: "Times of India", category: "business", url: "https://timesofindia.indiatimes.com/rssfeeds/1898055.cms", enabled: true}
+  - {name: "Times of India", category: "sports",   url: "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms", enabled: true}
+
+  # ---------------- NDTV ----------------
+  - {name: "NDTV", category: "top",   url: "https://feeds.feedburner.com/ndtvnews-top-stories", enabled: true}
+  - {name: "NDTV", category: "india", url: "https://feeds.feedburner.com/ndtvnews-india-news", enabled: true}
+  - {name: "NDTV", category: "world", url: "https://feeds.feedburner.com/ndtvnews-world-news", enabled: true}
+
+  # ---------------- Hindustan Times ----------------
+  - {name: "Hindustan Times", category: "india",    url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml", enabled: true}
+  - {name: "Hindustan Times", category: "world",    url: "https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml", enabled: true}
+  - {name: "Hindustan Times", category: "business", url: "https://www.hindustantimes.com/feeds/rss/business/rssfeed.xml", enabled: true}
+
+  # ---------------- Others ----------------
+  - {name: "Mint",           category: "news",     url: "https://www.livemint.com/rss/news", enabled: true}
+  - {name: "Economic Times", category: "top",      url: "https://economictimes.indiatimes.com/rssfeedstopstories.cms", enabled: true}
+  - {name: "News18",         category: "india",    url: "https://www.news18.com/commonfeeds/v1/eng/rss/india.xml", enabled: true}
+  - {name: "Firstpost",      category: "india",    url: "https://www.firstpost.com/commonfeeds/v1/mfp/rss/india.xml", enabled: true}
+
+# ----------------------------------------------------------------------
+data_ingestion:
+  destination_folder: "data/raw"
+  file_name: "indian_news.json"
+
+  # --- networking ---
+  timeout: 20                 # seconds per request
+  retries: 3                  # automatic retries on 429/5xx/connection errors
+  backoff: 1.0                # wait 1s, 2s, 4s ... between retries
+  max_workers: 8              # feeds / pages fetched in parallel
+  user_agent: "Mozilla/5.0 (compatible; LiveNewsSentimentProject/1.0)"
+
+  # --- data quality ---
+  max_description_chars: 1000 # trim very long summaries
+  merge_with_existing: true   # append to the old file instead of overwriting it
+  max_articles_kept: 20000    # keep newest N articles after merging
+
+  # Some feeds (e.g. Indian Express) give no summary. When true, the article
+  # page is opened and its meta description is used instead.
+  fetch_missing_description: true
+  max_description_fetches: 200   # per run, newest articles first
+
+# ----------------------------------------------------------------------
+data_cleaning:
+  input_file: "data/raw/indian_news.json"
+  output_folder: "data/processed"
+  output_json: "indian_news_clean.json"
+  output_csv: "indian_news_clean.csv"
+  report_file: "cleaning_report.json"
+  save_csv: true
+
+  # --- text cleaning ---
+  remove_urls: true
+  remove_emojis: true
+  normalize_quotes: true      # curly quotes/dashes -> plain ASCII
+  lowercase: false            # keep false for transformer/VADER sentiment models
+
+  # --- filtering ---
+  min_text_words: 4           # drop articles with fewer words (title + description)
+  drop_duplicate_titles: true
+  english_only: true
+  max_non_latin_ratio: 0.3    # drop if more than 30% of letters are non-Latin
+
+  # Regex patterns removed from the END of titles (case-insensitive)
+  title_suffix_patterns:
+    - '\s*\|\s*(Explained|Watch|Watch Video|Video|Photos?|In Pictures|Live Updates|Live)\s*$'
+    - '\s*[|-]\s*(The Hindu|The Indian Express|Indian Express|Times of India|NDTV|Hindustan Times|Mint|News18|Firstpost)\s*$'
+
+# ----------------------------------------------------------------------
+flask_app:
+  host: "127.0.0.1"
+  port: 5000
+  debug: true
+  per_page: 12                       # news cards per page
+  # Override with the SECRET_KEY environment variable in real use
+  secret_key: "change-this-secret-key"
+  # Demo login. Password for "admin" is: news123  (change it!)
+  # Make a new hash with:
+  #   python -c "from werkzeug.security import generate_password_hash as g; print(g('your-password'))"
+  users:
+    - username: "admin"
+      password_hash: "scrypt:32768:8:1$9cT8wPJtYOipcO1u$34d89522342e8e80b475fa14308b9b673290e732137dae9b672e7701f2ff494cdd7e8007a8dbd69cf024c5dcd8369ddfdccbdaf2fe92b0fae874be1e864de77b"
