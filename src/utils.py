@@ -1,9 +1,11 @@
 """Shared helpers: paths, config, logging, HTML/whitespace cleanup."""
+import hashlib
 import html
 import logging
 import os
 import re
 from html.parser import HTMLParser
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import yaml
 
@@ -77,3 +79,16 @@ def strip_html(text) -> str:
 def collapse_ws(text) -> str:
     """Replace any run of whitespace (incl. nbsp) with a single space."""
     return re.sub(r"[\s\u00a0]+", " ", text or "").strip()
+
+
+def normalize_url(url: str) -> str:
+    """Canonical form of a URL (no fragment, no utm_* tracking params)."""
+    parts = urlsplit(url.strip())
+    query = [(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith("utm_")]
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path,
+                       urlencode(query), ""))
+
+
+def make_id(url: str) -> str:
+    """Stable, URL-safe article id (16 hex chars) derived from the article URL."""
+    return hashlib.sha1(normalize_url(url).encode("utf-8")).hexdigest()[:16]

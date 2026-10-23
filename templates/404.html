@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not found - Indian News Live{% endblock %}
+{% block content %}
+<div class="empty">
+  <h2>Page not found</h2>
+  <p>That article doesn't exist or is no longer available.</p>
+  <p><a class="btn btn-primary" href="{{ url_for('index') }}">Back to all news</a></p>
+</div>
+{% endblock %}

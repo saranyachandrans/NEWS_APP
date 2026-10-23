@@ -3,3 +3,7 @@ feedparser
 PyYAML
 setuptools
 flask
+numpy
+sentence-transformers
+# optional, only for named_entities.method: "spacy" in config.yaml
+# spacy

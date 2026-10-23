@@ -102,6 +102,8 @@ flask_app:
   port: 5000
   debug: true
   per_page: 12                       # news cards per page
+  similar_count: 3                   # similar-news cards on the article page
+  similar_min_score: 0.0             # 0 = always show the 3 closest. With MiniLM, ~0.4 hides weak matches
   # Override with the SECRET_KEY environment variable in real use
   secret_key: "change-this-secret-key"
   # Demo login. Password for "admin" is: news123  (change it!)
@@ -110,3 +112,47 @@ flask_app:
   users:
     - username: "admin"
       password_hash: "scrypt:32768:8:1$9cT8wPJtYOipcO1u$34d89522342e8e80b475fa14308b9b673290e732137dae9b672e7701f2ff494cdd7e8007a8dbd69cf024c5dcd8369ddfdccbdaf2fe92b0fae874be1e864de77b"
+
+# ----------------------------------------------------------------------
+data_preprocessing:
+  input_file: "data/processed/indian_news_clean.json"   # output of the cleaning stage
+  output_folder: "data/processed"
+  output_json: "indian_news_vectorized.json"   # clean news + processed text + "vector"
+  vectors_file: "indian_news_vectors.npz"      # same vectors as a numpy matrix (+ ids) for similarity search
+  report_file: "preprocessing_report.json"
+
+  text_field: "text"                    # title + description, built by the cleaning stage
+  vector_field: "vector"                # field appended to each article
+  store_processed_text: true            # also append the stop-word-free text that was embedded
+  processed_text_field: "text_processed"
+  decimals: 4                           # round vector values to keep the JSON small
+  reuse_existing_vectors: true          # on re-runs only embed new/changed articles (fast)
+
+  # ---- stop words ----
+  stopwords:
+    remove: true
+    # Words taken OUT of the stop-word list because they change the meaning of a
+    # headline ("no toilets", "not attend", "against the move", "after the verdict").
+    # Keep every word in quotes: unquoted no / off / on / yes are read by YAML as true/false.
+    keep_words: ["no", "nor", "not", "never", "none", "against", "after", "before", "over",
+                 "under", "above", "below", "between", "off", "up", "down", "out", "more",
+                 "most", "only", "all"]
+    extra_words: []                     # additional words to remove, e.g. ["says", "said"]
+
+  # ---- named entities (people, places, organisations) ----
+  # Removing stop words can damage names: "WHO" and "IT" disappear,
+  # "The Hindu" -> "Hindu", "Bank of India" -> "Bank India".
+  # With keep: true, stop words that are part of a name are NOT removed.
+  # NOTE: keep data_cleaning.lowercase = false, capital letters are how names are found.
+  # (Texts written in ALL CAPS are left untouched, since names cannot be told apart there.)
+  named_entities:
+    keep: true
+    method: "heuristic"                 # "heuristic" (no download) or "spacy" (more accurate)
+    spacy_model: "en_core_web_sm"       # pip install spacy && python -m spacy download en_core_web_sm
+    spacy_labels: [PERSON, ORG, GPE, LOC, NORP, FAC, EVENT, LAW, PRODUCT, WORK_OF_ART]
+
+  # ---- embeddings ----
+  embedding:
+    model_name: "sentence-transformers/all-MiniLM-L6-v2"   # 384-dimensional vectors
+    batch_size: 64
+    normalize: true                     # unit-length vectors: cosine similarity = dot product

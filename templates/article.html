@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }} - Indian News Live{% endblock %}
+{% block content %}
+
+<a class="back-link" href="{{ url_for('index') }}">&larr; Back to all news</a>
+
+<article class="article">
+  <div class="chips">
+    <span class="chip chip-source">{{ a.source }}</span>
+    <span class="chip chip-cat">{{ a.category }}</span>
+  </div>
+
+  <h1 class="article-title">{{ a.title }}</h1>
+
+  <div class="article-meta">
+    {% if a._dt %}<time title="{{ a._dt|ist_date }}">{{ a._dt|ist_date }} &middot; {{ a._dt|time_ago }}</time>{% else %}<span>Date unknown</span>{% endif %}
+    {% if a.author %}<span>&middot; By {{ a.author }}</span>{% endif %}
+  </div>
+
+  {% if a.description %}
+    <p class="article-body">{{ a.description }}</p>
+  {% else %}
+    <p class="article-body muted">No summary is available for this story.</p>
+  {% endif %}
+
+  {% if a.tags %}
+  <div class="chips tags">
+    {% for t in a.tags %}<span class="chip chip-tag">#{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if a.url != '#' %}
+  <a class="btn btn-outline source-link" href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Read original at {{ a.source }} &nearr;</a>
+  {% endif %}
+</article>
+
+<section class="similar">
+  <div class="similar-head">
+    <h2>Similar news</h2>
+  </div>
+
+  {% if similar %}
+  <div class="grid">
+    {% for s in similar %}
+    <article class="card">
+      <div class="chips">
+        <span class="chip chip-source">{{ s.source }}</span>
+        <span class="chip chip-cat">{{ s.category }}</span>
+        <span class="chip chip-match" title="Cosine similarity of the article vectors">{{ "%.0f"|format(s.score * 100) }}% match</span>
+      </div>
+      <h3 class="card-title">
+        <a href="{{ url_for('article', article_id=s.id) }}">{{ s.title }}</a>
+      </h3>
+      {% if s.description %}<p class="card-desc">{{ s.description }}</p>{% endif %}
+      <div class="card-foot">
+        <time title="{{ s._dt|ist_date }}">{{ s._dt|time_ago or "date unknown" }}</time>
+        <a class="read-more" href="{{ url_for('article', article_id=s.id) }}">Read more &rarr;</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% elif similar_status == 'no_vectors' %}
+  <p class="muted-note">Similar news is not available yet. Run <code>python main.py --stage preprocess</code> to create the article vectors, then reload this page.</p>
+  {% elif similar_status == 'not_indexed' %}
+  <p class="muted-note">This story was collected after the last preprocessing run, so it has no vector yet. Run <code>python main.py --stage preprocess</code> to add it (only new stories are processed, so it is quick).</p>
+  {% else %}
+  <p class="muted-note">No similar stories found.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

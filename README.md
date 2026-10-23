@@ -2,11 +2,12 @@
 
 A small end-to-end project that **collects Indian news from RSS feeds, cleans it, and shows it as cards in a Flask web app** with a login button in the navbar.
 
-The project is built in three stages:
+The project is built in four stages:
 
 1. **Data ingestion**: download articles from many news sites and save them as JSON.
 2. **Data cleaning**: turn the raw JSON into a clean dataset (JSON + CSV) ready for analysis such as sentiment classification.
-3. **Web app**: browse, search and filter the news as cards.
+3. **Data preprocessing**: remove stop words (keeping named entities) and create `all-MiniLM-L6-v2` embeddings, appended to each article (for "similar news" and later models).
+4. **Web app**: browse, search and filter the news as cards.
 
 ---
 
@@ -24,19 +25,27 @@ trash/
 │   └── processed/                       # output of cleaning
 │       ├── indian_news_clean.json
 │       ├── indian_news_clean.csv
-│       └── cleaning_report.json
+│       ├── cleaning_report.json
+│       ├── indian_news_vectorized.json    # clean news + text_processed + "vector"
+│       ├── indian_news_vectors.npz        # same vectors as a numpy matrix + ids
+│       └── preprocessing_report.json
 ├── src/
-│   ├── utils.py                         # config loading, logging, HTML stripping
+│   ├── utils.py                         # config, logging, HTML stripping, article ids
 │   ├── components/
 │   │   ├── dataingestion.py             # DataIngestion
-│   │   └── datacleaning.py              # DataCleaning
+│   │   ├── datacleaning.py              # DataCleaning
+│   │   ├── datapreprocessing.py         # DataPreprocessing (stop words, entities, embeddings)
+│   │   └── similarity.py                # SimilarityIndex (similar news from the vectors)
 │   └── pipelines/
 │       ├── dataingestionpipeline.py     # DataIngestionPipeline
-│       └── datacleaningpipeline.py      # DataCleaningPipeline
+│       ├── datacleaningpipeline.py      # DataCleaningPipeline
+│       └── datapreprocessingpipeline.py # DataPreprocessingPipeline
 ├── templates/
 │   ├── base.html                        # layout + navbar (Login button)
 │   ├── index.html                       # news cards, search, filters, pagination
-│   └── login.html
+│   ├── article.html                     # single news page + similar news
+│   ├── login.html
+│   └── 404.html
 └── static/style.css
 ```
 
@@ -120,7 +129,7 @@ python main.py --stage clean
 python -m src.pipelines.datacleaningpipeline
 ```
 
-Run both stages together with `python main.py`.
+Run all stages with `python main.py` (ingest, then clean, then preprocess).
 
 ### Findings from the first dataset
 
@@ -129,7 +138,79 @@ Run both stages together with `python main.py`.
 
 ---
 
-## Step 3: Flask web app
+## Step 3: Data preprocessing (stop words, named entities, embeddings)
+
+**Component:** `src/components/datapreprocessing.py`
+**Pipeline:** `src/pipelines/datapreprocessingpipeline.py`
+
+Reads the cleaned news (`data/processed/indian_news_clean.json`) and, for every article:
+
+1. **Removes stop words** from the `text` field (title + description) using the standard English stop-word list.
+2. **Keeps named entities intact**: stop words that belong to a name are not removed (see below).
+3. **Creates a 384-dimensional embedding** of the result with `sentence-transformers/all-MiniLM-L6-v2`.
+4. **Appends** `text_processed` (the text that was embedded) and `vector` to the original article.
+
+The result goes to `data/processed/indian_news_vectorized.json`; the cleaned file is left untouched, so the web app does not have to load the long vectors.
+
+```bash
+pip install sentence-transformers          # also installs PyTorch; first run downloads the model
+python main.py --stage preprocess
+# or
+python -m src.pipelines.datapreprocessingpipeline
+```
+
+### Stop words
+
+- The standard English list (the NLTK list) is built in, so no download is needed.
+- **Words that change the meaning are kept** (`stopwords.keep_words` in `config.yaml`): `no`, `not`, `nor`, `never`, `none`, `against`, `after`, `before`, `over`, `under`, `above`, `below`, `between`, `off`, `up`, `down`, `out`, `more`, `most`, `only`, `all`. Removing "no" from "No toilets, ID cards or safety gear" would reverse its meaning.
+- Add your own with `stopwords.extra_words` (for example `["says", "said"]`).
+- Only the stop-word itself is deleted; punctuation, numbers and symbols stay, and hyphenated words (`state-of-the-art`) are left alone.
+- **Quote every word in the YAML lists.** Unquoted `no` and `off` are read by YAML as `false`; the code stops with a clear error if it finds such a value.
+- Set `stopwords.remove: false` to embed the original text instead. Transformer models read whole sentences, so stop-word removal can slightly lower similarity quality; it is worth comparing both on your own data.
+
+### Named entities
+
+`all-MiniLM-L6-v2` itself never removes words, so it does not damage named entities. **The stop-word step does**: "WHO" and "IT" are on the stop-word list, and "The Hindu" becomes "Hindu" and "Bank of India" becomes "Bank India". With `named_entities.keep: true` these are protected.
+
+| Method | How | Notes |
+|---|---|---|
+| `heuristic` (default) | Uses capitalisation: acronyms (`WHO`, `IT`), connectors between capitalised words (`Bank of India`, `Jammu and Kashmir`), `The` before a name (`The Hindu`), and a capitalised word following a name | No download. Cautious: when unsure it keeps the word, so it sometimes keeps a stop word that was not part of a name. In Title Case or ALL-CAPS headlines it is less precise (ALL-CAPS texts are left untouched). |
+| `spacy` | spaCy named-entity recognition (people, places, organisations, groups, events ...; labels in `spacy_labels`) | More accurate. `pip install spacy` and `python -m spacy download en_core_web_sm` |
+
+Keep `data_cleaning.lowercase: false`: capital letters are how names are found.
+
+On the first dataset (460 articles) it removed about 1,400 stop words (articles went from 15.4 to 12.4 words on average), kept 74 stop words inside names, and left every `no`, `not`, `never` and `against` in place.
+
+### Embeddings
+
+- Model: `sentence-transformers/all-MiniLM-L6-v2` (`embedding.model_name`), 384 numbers per article, unit length (cosine similarity = dot product).
+- The model lowercases its input, so it cannot tell "WHO" from "who" by itself; keeping the word is still better than deleting it.
+- Texts longer than the model's limit (256 word pieces) are truncated by the model; headlines plus a short description fit.
+
+### Outputs
+
+- `indian_news_vectorized.json`: every original field plus `text_processed` and `vector`.
+- `indian_news_vectors.npz`: the same vectors as a numpy matrix with matching `ids`. Use this for similarity search (it is much smaller than the JSON).
+- `preprocessing_report.json`: model, vector length, stop words removed and kept, average words before and after, time taken.
+
+Re-running recomputes the vectors for **all** articles. Do not mix vectors from different runs or settings.
+
+### Using the vectors (for the "similar news" step later)
+
+```python
+import numpy as np
+data = np.load("data/processed/indian_news_vectors.npz")
+ids, vectors = data["ids"], data["vectors"]
+
+i = 0                                    # position of an article
+scores = vectors @ vectors[i]            # cosine similarity to every article
+top = np.argsort(scores)[::-1][1:4]      # 3 most similar (skip itself)
+similar_ids = ids[top]
+```
+
+---
+
+## Step 4: Flask web app
 
 **Files:** `app.py`, `templates/`, `static/style.css`
 
@@ -141,7 +222,11 @@ Open http://127.0.0.1:5000.
 
 Features:
 
-- **News cards:** source and category chips, headline, a three-line description, time posted ("2h ago", full IST time on hover) and a "Read more" link that opens the original article in a new tab.
+- **News cards:** source and category chips, headline, a three-line description, time posted ("2h ago", full IST time on hover) and a "Read more" link. Clicking a card opens the article **inside the app** at `/article/<id>`; it does not send the reader to the source website.
+- **Article page:** same navbar, the story's source, category, date, author, summary and tags, a "Back to all news" link, and a smaller "Read original" link to the source site. Unknown article ids show a 404 page.
+- **Similar news:** below the article, the 3 most similar stories are shown as cards with a "% match" tag. They are found by comparing article vectors (`indian_news_vectors.npz`, from Step 3): the article's vector is compared with every other article's vector by cosine similarity, and the closest 3 are returned (the article itself is never included). The logic is in `src/components/similarity.py` and is called by `get_similar_articles()` in `app.py`. Similar news comes from any source, so the same story from another outlet can appear. The number of cards is `flask_app.similar_count`; `flask_app.similar_min_score` hides weak matches (default `0` always shows the 3 closest; with MiniLM, around `0.4` is a sensible cut-off).
+  - Without the vectors file, the section shows a hint to run `python main.py --stage preprocess` instead of cards.
+  - Articles collected after the last preprocess run have no vector yet; they show a message until preprocessing is run again (their own page still works).
 - **Search and filters:** search box plus source and category dropdowns, with pagination (12 cards per page).
 - **Navbar with login:** a **Login** button; after login it shows the username and a **Logout** button.
 - **Responsive and theme-aware:** works on phones and follows the device's light or dark mode.
@@ -169,7 +254,8 @@ Features:
 | `rss_feeds` | Feed list: `name`, `category`, `url`, `enabled` |
 | `data_ingestion` | Output file, timeout, retries, parallel workers, User-Agent, description length, merge behaviour, page-description fallback |
 | `data_cleaning` | Input/output paths, URL/emoji/quote handling, lowercase, minimum words, duplicate and English-only filters, title suffix patterns |
-| `flask_app` | Host, port, debug, cards per page, secret key, users |
+| `data_preprocessing` | Input/output files, stop-word lists, named-entity method (`heuristic` or `spacy`), embedding model and batch size |
+| `flask_app` | Host, port, debug, cards per page, similar-news cards and minimum score, secret key, users |
 
 ---
 
@@ -178,10 +264,11 @@ Features:
 - The feed URLs were written from memory and **have not been tested against the live sites**. Run ingestion once, read the feed summary, and disable any feed that fails.
 - Some sites block automated requests or change their feed addresses over time.
 - The category dropdown only shows `general` until you run the new ingestion; the first dataset was collected before categories were recorded.
-- Articles are headlines and short summaries, not full article text.
+- Articles are headlines and short summaries, not full article text, so the article page shows the summary (and the title only, when the source gave none).
 
 ## Possible next steps
 
+- Boost similar-news ranking with the same category or recent publication date, on top of the vector score.
 - Sentiment analysis on the `text` field (the project name in `setup.py` is `live-news-sentiment`), with the sentiment shown on each card.
 - Scheduled ingestion (cron or Task Scheduler) so the dataset keeps growing.
 - Restrict selected pages or features to logged-in users, and add a sign-up page backed by a database.

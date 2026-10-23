@@ -1,0 +1,13 @@
+{
+  "articles": 2537,
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "vector_dimensions": 384,
+  "stopword_removal": true,
+  "keep_named_entities": true,
+  "entity_method": "heuristic",
+  "seconds": 29.94,
+  "stopwords_removed": 18884,
+  "stopwords_kept_inside_names": 1094,
+  "avg_words_before": 30.2,
+  "avg_words_after": 22.9
+}

@@ -33,12 +33,12 @@
         <span class="chip chip-cat">{{ a.category }}</span>
       </div>
       <h2 class="card-title">
-        <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">{{ a.title }}</a>
+        <a href="{{ url_for('article', article_id=a.id) }}">{{ a.title }}</a>
       </h2>
       {% if a.description %}<p class="card-desc">{{ a.description }}</p>{% endif %}
       <div class="card-foot">
         <time title="{{ a._dt|ist_date }}">{{ a._dt|time_ago or "date unknown" }}</time>
-        <a class="read-more" href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Read more &rarr;</a>
+        <a class="read-more" href="{{ url_for('article', article_id=a.id) }}">Read more &rarr;</a>
       </div>
     </article>
     {% endfor %}
